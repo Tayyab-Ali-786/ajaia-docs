@@ -15,7 +15,7 @@ button, input, select { font: inherit; color: inherit; }
 .spacer { flex: 1; }
 .logo { display: inline-block; width: 22px; height: 22px; border-radius: 5px; background: var(--primary); vertical-align: -4px; margin-right: 6px; }
 
-.btn { border: 1px solid var(--border); background: var(--surface); padding: 7px 14px; border-radius: var(--radius); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.btn { border: 1px solid var(--border); background: var(--surface); color: inherit; padding: 7px 14px; border-radius: var(--radius); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .btn:hover:not(:disabled) { background: #f0f2f5; }
 .btn:disabled { opacity: 0.55; cursor: default; }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
@@ -76,6 +76,7 @@ button, input, select { font: inherit; color: inherit; }
 .paper { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; min-height: 70vh; padding: 48px 64px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
 .paper .tiptap { outline: none; min-height: 60vh; line-height: 1.6; }
 .paper .tiptap > :first-child { margin-top: 0; }
+.paper .tiptap li p { margin: 0.15em 0; }
 .paper .tiptap blockquote { border-left: 3px solid var(--border); margin-left: 0; padding-left: 14px; color: var(--muted); }
 .paper .tiptap pre { background: #f3f4f6; padding: 10px; border-radius: 6px; }
 @media (max-width: 640px) { .paper { padding: 20px 16px; } }

@@ -8,7 +8,8 @@
     "build": "vite build",
     "start": "NODE_ENV=production node --import tsx server/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "e2e": "node e2e/ui.e2e.mjs"
   },
   "type": "module",
   "dependencies": {
@@ -37,6 +38,7 @@
     "@types/supertest": "^7.2.1",
     "@types/turndown": "^5.0.6",
     "@vitejs/plugin-react": "^6.1.2",
+    "puppeteer-core": "^25.16.0",
     "supertest": "^7.3.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
