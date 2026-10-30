@@ -4,7 +4,7 @@ A small full-stack Google-Docs-style editor: create, format, rename and autosave
 
 - **Live app:** https://ajaia-docs-mpvh.onrender.com (Render free tier: after about 15 minutes idle, the first load takes **about 30–50 s** to wake up)
 - **Source:** https://github.com/Tayyab-Ali-786/ajaia-docs
-- **Walkthrough video:** see `VIDEO_URL.txt`
+- **Walkthrough video:** https://www.loom.com/share/f6610bc47d724d20aa8f399c989ce037
 
 ## Test accounts
 

@@ -13,7 +13,7 @@ Ajaia Docs is a lightweight collaborative document editor:
 |---|---|
 | **Live app** | https://ajaia-docs-mpvh.onrender.com. Free tier: after about 15 minutes idle, the first load takes **about 30–50 s** to wake up. |
 | **Repo** | https://github.com/Tayyab-Ali-786/ajaia-docs (the same source is in this folder) |
-| **Video** | `VIDEO_URL.txt` |
+| **Video** | https://www.loom.com/share/f6610bc47d724d20aa8f399c989ce037 (also in `VIDEO_URL.txt`) |
 | **Test accounts** | No password; pick one on the login screen: `alice@ajaia.test`, `bob@ajaia.test`, `carol@ajaia.test` |
 | **Try sharing** | Alice in one window, Bob in an incognito window. Alice: **Share** → `bob@ajaia.test` → *Can view*. Bob sees it under **Shared with me**. |
 
