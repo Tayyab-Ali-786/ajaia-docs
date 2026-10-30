@@ -108,6 +108,13 @@ describe("documents, sharing & access control", () => {
       .send({ content: '<p onclick="x()">hi</p><script>alert(1)</script><img src=x onerror=alert(1)>' })
       .expect(201);
     expect(body.content).toBe("<p>hi</p>");
+
+    // Text alignment is the only inline style allowed through.
+    const aligned = await alice
+      .post("/api/documents")
+      .send({ content: '<h1 style="text-align: center">T</h1><p style="text-align:right;color:red">x</p><p style="position:fixed">y</p>' })
+      .expect(201);
+    expect(aligned.body.content).toBe('<h1 style="text-align:center">T</h1><p style="text-align:right">x</p><p>y</p>');
   });
 
   it("validates input", async () => {

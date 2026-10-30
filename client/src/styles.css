@@ -59,9 +59,9 @@ button, input, select { font: inherit; color: inherit; }
 /* editor */
 .editor-page { max-width: 900px; margin: 0 auto; padding: 16px 16px 80px; }
 .doc-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.title-input { font-size: 1.25rem; font-weight: 600; border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; background: transparent; min-width: 0; flex: 0 1 380px; }
+.title-input { font-size: 1.25rem; font-weight: 600; border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; background: transparent; min-width: 0; flex: 1 1 160px; }
 .title-input:hover:not(:disabled), .title-input:focus { border-color: var(--border); background: var(--surface); outline: none; }
-.save-status { font-size: 0.85rem; color: var(--muted); }
+.save-status { font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
 .save-status.saved { color: var(--ok); }
 .save-status.error, .save-status.conflict { color: var(--danger); }
 

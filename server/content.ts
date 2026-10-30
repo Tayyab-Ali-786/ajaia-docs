@@ -10,7 +10,9 @@ const ALLOWED: sanitizeHtml.IOptions = {
     "p", "br", "h1", "h2", "h3", "strong", "b", "em", "i", "u", "s",
     "ul", "ol", "li", "blockquote", "code", "pre", "hr", "a",
   ],
-  allowedAttributes: { a: ["href", "target", "rel"] },
+  allowedAttributes: { a: ["href", "target", "rel"], p: ["style"], h1: ["style"], h2: ["style"], h3: ["style"] },
+  // Only text alignment survives; any other inline style is dropped.
+  allowedStyles: { "*": { "text-align": [/^(left|center|right|justify)$/] } },
   allowedSchemes: ["http", "https", "mailto"],
 };
 

@@ -59,6 +59,8 @@ await clickText(alice, ".tb", "• List");
 await alice.keyboard.type("Sharing\nFile import\nAutosave\n\n");
 await clickText(alice, ".tb", "1. List");
 await alice.keyboard.type("Deploy\nRecord demo");
+await alice.click(".tiptap h1");
+await alice.click('.tb[title="Align center"]');
 await waitSaved(alice);
 await page_shot(alice, "02-editor-formatting");
 
@@ -66,9 +68,10 @@ await alice.reload({ waitUntil: "networkidle0" });
 await alice.waitForSelector(".tiptap h1");
 const html = await alice.$eval(".tiptap", (e) => e.innerHTML);
 check((await alice.$eval(".title-input", (e) => e.value)) === "Q4 Launch Plan", "rename persisted after reload");
-check(html.includes("<h1>Launch goals</h1>"), "heading persisted");
+check(/<h1[^>]*>Launch goals<\/h1>/.test(html), "heading persisted");
 check(html.includes("<strong>bold</strong>") && html.includes("<u>underlined</u>") && html.includes("<em>italic</em>"), "bold/underline/italic persisted");
 check(/<ul>.*Sharing.*<\/ul>/s.test(html) && /<ol>.*Deploy.*<\/ol>/s.test(html), "bullet + numbered lists persisted");
+check(html.includes('<h1 style="text-align: center;">Launch goals</h1>'), "center alignment persisted");
 
 // ---- share with Bob as viewer
 await clickText(alice, "button", "Share");
@@ -116,6 +119,20 @@ await (await alice.$("input[type=file]")).uploadFile(path.join(os.tmpdir(), "bad
 await alice.waitForSelector(".alert.error");
 check((await alice.$eval(".alert.error", (e) => e.textContent)).includes("Unsupported file type"), "unsupported upload shows error");
 await page_shot(alice, "05-list-owner");
+
+// ---- doc deleted while open: save must stop with a clear message, not retry in a loop
+await clickText(alice, "button", "New document");
+await alice.waitForSelector(".tiptap");
+const goneId = alice.url().split("/d/")[1];
+await alice.evaluate((id) => fetch(`/api/documents/${id}`, { method: "DELETE" }), goneId);
+let patches = 0;
+alice.on("request", (r) => r.method() === "PATCH" && patches++);
+await alice.click(".tiptap");
+await alice.keyboard.type("orphaned edit");
+await alice.waitForFunction(() => document.querySelector(".alert.error")?.textContent.includes("deleted"), { timeout: 10000 });
+await new Promise((r) => setTimeout(r, 4000));
+check(patches === 1, `no retry loop after 404 (PATCH requests: ${patches})`);
+check((await alice.$eval(".tiptap", (e) => e.getAttribute("contenteditable"))) === "false", "editor locked after document is gone");
 
 // ---- Bob: sees shared doc, read-only
 const bob = await newUser("bob");

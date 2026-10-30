@@ -23,11 +23,11 @@ Sign-in is mocked: pick a seeded user on the login screen (no password).
 | Area | What works |
 |---|---|
 | Documents | Create, rename (click the title), edit, reopen, delete (owner only). Autosave ~0.8 s after you stop typing, plus `Ctrl/Cmd+S`. Save status is shown ("Saving… / All changes saved"). |
-| Rich text | Bold, italic, underline, strikethrough, Heading 1–3, bulleted and numbered lists, quotes, undo/redo. Markdown shortcuts work too (`# `, `- `, `1. `). |
+| Rich text | Bold, italic, underline, strikethrough, Heading 1–3, text alignment (left, center, right, justify), bulleted and numbered lists, quotes, undo/redo. Markdown shortcuts work too (`# `, `- `, `1. `). Pasted images are rejected with a clear message (images are out of scope). |
 | File import | **`.txt`, `.md`, `.docx` (max 2 MB)** → a new editable document, titled after the file name. Other types are rejected with a clear message. |
 | Sharing | Owner shares by email as **viewer** (read-only) or **editor**, changes the role, or revokes access. The list separates **My documents** from **Shared with me** (with role + owner). |
 | Persistence | Documents, formatting (stored as sanitized HTML) and shares are kept in Postgres: Supabase in production, embedded PGlite (Postgres compiled to WASM) locally and in tests. |
-| Conflict safety | Every save carries a version number. If someone else saved first, you get a "Reload" prompt (HTTP 409) instead of silently overwriting their work. |
+| Save safety | Every save carries a version number. If someone else saved first, you get a "Reload" prompt (HTTP 409) instead of silently overwriting their work. If the document is deleted or your access is removed while it's open, saving stops and the editor locks with a clear message. Network errors keep your edits in the tab and retry with increasing delays. |
 | Version history | **History** lists saved versions with the author and time, previews any of them, and lets editors or owners restore one. A restore is itself a new version, so it can be undone. Quick autosaves by the same person within 2 minutes merge into one entry. |
 | Export | Download any document you can open as Markdown. |
 
@@ -71,6 +71,7 @@ npm run typecheck
   - rename, reload and persistence
   - share as viewer, restore from version history and undo the restore, import `.md`, rejected upload
   - Bob sees a read-only view, and can browse history but not restore
+  - text alignment persists, and a document deleted while open stops saving after one request (no retry loop)
 
   `CHROME_PATH` overrides the browser path.
 
