@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import pg from "pg";
 import { PGlite } from "@electric-sql/pglite";
 
@@ -82,6 +83,7 @@ export async function openDb(url: string): Promise<DB> {
     }, () => pool.end());
     await pool.query(SCHEMA);
   } else {
+    if (!url.includes("://")) fs.mkdirSync(url, { recursive: true }); // PGlite won't create parent dirs
     const lite = new PGlite(url);
     db = new DB(async (sql, params) => {
       const r = await lite.query(sql, params);
