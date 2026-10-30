@@ -41,7 +41,7 @@
 - version history with preview and restore (a restore can be undone)
 - text alignment
 - save-failure handling: stops on 404/403, retries network errors with backoff, no retry loops
-- 8 API tests plus a 17-check E2E UI run
+- 9 API tests plus an 18-check E2E UI run
 
 **Incomplete or simplified:**
 - Auth is mocked: seeded users, no passwords.

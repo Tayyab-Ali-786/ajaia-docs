@@ -52,6 +52,7 @@ function LoadedEditor({ initial, onBack, onReplaced }: { initial: Doc; onBack: (
   const retryDelay = useRef(AUTOSAVE_MS);
   const stopped = useRef(false); // set on conflict / deleted / access lost: no further saves
   const [notice, setNotice] = useState("");
+  const noticeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const flush = useCallback(async () => {
     clearTimeout(timer.current);
@@ -70,7 +71,7 @@ function LoadedEditor({ initial, onBack, onReplaced }: { initial: Doc; onBack: (
       inFlight.current = false;
       const code = e instanceof ApiError ? e.status : 0;
       // Three kinds of failure, handled differently:
-      if (code === 409 || code === 404 || code === 403) {
+      if (code === 409 || code === 404 || code === 403 || code === 401) {
         // 1. Permanent: retrying can never succeed. Stop and lock the editor.
         pending.current = {};
         stopped.current = true;
@@ -78,6 +79,7 @@ function LoadedEditor({ initial, onBack, onReplaced }: { initial: Doc; onBack: (
         setSaveError(
           code === 409 ? e.message
           : code === 404 ? "This document was deleted or your access was removed. Your latest edits were not saved; copy anything you need."
+          : code === 401 ? "You've been signed out. Your latest edits were not saved; sign in again and reopen the document."
           : "Your access was changed to view-only. Your latest edits were not saved.",
         );
         return;
@@ -131,12 +133,15 @@ function LoadedEditor({ initial, onBack, onReplaced }: { initial: Doc; onBack: (
     },
   });
 
+  /** Image files are blocked with a notice; HTML with <img> pastes its text, with a notice that images were dropped. */
   function rejectImages(data: DataTransfer | null) {
-    const hasImage = [...(data?.files ?? [])].some((f) => f.type.startsWith("image/"));
-    if (!hasImage) return false;
-    setNotice("Images aren't supported in this editor yet. Paste text only.");
-    setTimeout(() => setNotice(""), 4000);
-    return true;
+    const hasImageFile = [...(data?.files ?? [])].some((f) => f.type.startsWith("image/"));
+    const htmlHasImage = /<img[\s>]/i.test(data?.getData("text/html") ?? "");
+    if (!hasImageFile && !htmlHasImage) return false;
+    setNotice(hasImageFile ? "Images aren't supported in this editor yet. Paste text only." : "Images aren't supported yet, so they were left out of the paste.");
+    clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(""), 4000);
+    return hasImageFile && !htmlHasImage; // text-with-images pastes go through (the editor drops the images)
   }
 
   // Once saving is impossible, stop accepting edits so nothing else is silently lost.

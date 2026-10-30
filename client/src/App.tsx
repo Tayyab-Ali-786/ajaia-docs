@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { api, type User } from "./api.ts";
 import { Login } from "./Login.tsx";
 import { DocList } from "./DocList.tsx";
@@ -31,9 +32,11 @@ export function App() {
   if (!user) return <Login onLogin={setUser} />;
 
   const signOut = async () => {
+    // Unmount the editor synchronously first: its unmount flush sends any pending save
+    // while the session cookie is still valid, before the logout request goes out.
+    flushSync(() => navigate("/"));
     await api.logout().catch(() => {});
     setUser(null);
-    navigate("/");
   };
 
   const docMatch = path.match(/^\/d\/([\w-]+)$/);

@@ -52,7 +52,7 @@ Dev mode with hot reload: `npm run dev:server` and `npm run dev:client` in two t
 ## Tests
 
 ```bash
-npm test         # 8 API tests (Vitest + Supertest, in-memory PGlite Postgres)
+npm test         # 9 API tests (Vitest + Supertest, in-memory PGlite Postgres)
 npm run e2e      # headless-Chrome UI run against a running server; writes docs/screenshots/
 npm run typecheck
 ```
@@ -66,12 +66,13 @@ npm run typecheck
   - XSS sanitization
   - validation
   - `.md`/`.txt` import and rejection of unsupported types
+  - edge cases: malformed versions, empty or owner email, non-ASCII export file names, imports that grow past the size limit once converted
 - **E2E** (`e2e/ui.e2e.mjs`) drives the real UI as Alice and Bob:
   - formatting through the toolbar and shortcuts
   - rename, reload and persistence
   - share as viewer, restore from version history and undo the restore, import `.md`, rejected upload
   - Bob sees a read-only view, and can browse history but not restore
-  - text alignment persists, and a document deleted while open stops saving after one request (no retry loop)
+  - text alignment persists, a document deleted while open stops saving after one request (no retry loop), and "Switch user" right after typing doesn't lose the edit
 
   `CHROME_PATH` overrides the browser path.
 

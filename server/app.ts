@@ -48,12 +48,17 @@ export function createApp(db: DB, opts: AppOptions) {
 
   /** Load a doc and the caller's role on it. Missing OR inaccessible -> 404 (don't leak existence). */
   async function loadDoc(docId: string, userId: number): Promise<{ doc: DocRow; role: Role }> {
-    const doc = await db.get<DocRow>("SELECT * FROM documents WHERE id = $1", [docId]);
-    if (doc) {
+    // One round trip: the document plus the caller's share row (if any).
+    const row = await db.get<DocRow & { share_role: Role | null }>(
+      `SELECT d.*, s.role AS share_role FROM documents d
+       LEFT JOIN document_shares s ON s.document_id = d.id AND s.user_id = $2
+       WHERE d.id = $1`,
+      [docId, userId],
+    );
+    if (row) {
+      const { share_role, ...doc } = row;
       if (doc.owner_id === userId) return { doc, role: "owner" };
-      const share = await db.get<{ role: Role }>(
-        "SELECT role FROM document_shares WHERE document_id = $1 AND user_id = $2", [docId, userId]);
-      if (share) return { doc, role: share.role };
+      if (share_role) return { doc, role: share_role };
     }
     throw new HttpError(404, "Document not found");
   }
@@ -64,10 +69,18 @@ export function createApp(db: DB, opts: AppOptions) {
 
   function validTitle(t: unknown): string {
     if (typeof t !== "string") throw new HttpError(400, "Title must be a string");
-    const title = t.trim();
+    const title = t.replace(/\s+/g, " ").trim(); // no newlines/tabs in titles
     if (!title) throw new HttpError(400, "Title cannot be empty");
     if (title.length > MAX_TITLE) throw new HttpError(400, `Title must be ≤ ${MAX_TITLE} characters`);
     return title;
+  }
+
+  /** `version` is optional (defaults to current = last-write-wins), but must be a sane integer if given. */
+  function validVersion(v: unknown, current: number): number {
+    if (v === undefined) return current;
+    if (!Number.isSafeInteger(v) || (v as number) < 1 || (v as number) > 2_147_483_647)
+      throw new HttpError(400, "version must be a positive integer");
+    return v as number;
   }
 
   function validContent(c: unknown): string {
@@ -84,8 +97,7 @@ export function createApp(db: DB, opts: AppOptions) {
     );
 
   async function serializeDoc(doc: DocRow, role: Role) {
-    const owner = (await getUser(doc.owner_id))!;
-    const shares = role === "owner" ? await listShares(doc.id) : [];
+    const [owner, shares] = await Promise.all([getUser(doc.owner_id), role === "owner" ? listShares(doc.id) : []]);
     return {
       id: doc.id, title: doc.title, content: doc.content, version: doc.version,
       createdAt: doc.created_at, updatedAt: doc.updated_at,
@@ -95,8 +107,10 @@ export function createApp(db: DB, opts: AppOptions) {
 
   async function createDoc(ownerId: number, title: string, content: string) {
     const id = crypto.randomUUID();
-    await db.run("INSERT INTO documents (id, owner_id, title, content) VALUES ($1, $2, $3, $4)", [id, ownerId, title, content]);
-    const doc = (await db.get<DocRow>("SELECT * FROM documents WHERE id = $1", [id]))!;
+    const doc = (await db.get<DocRow>(
+      "INSERT INTO documents (id, owner_id, title, content) VALUES ($1, $2, $3, $4) RETURNING *",
+      [id, ownerId, title, content],
+    ))!;
     await recordVersion(doc, ownerId, "created");
     return doc;
   }
@@ -124,13 +138,12 @@ export function createApp(db: DB, opts: AppOptions) {
     const conflict = new HttpError(409, "This document was changed by someone else. Reload to get the latest version.");
     if (expected !== doc.version) throw conflict;
     // The version check lives in the WHERE clause so it's atomic even with concurrent requests.
-    const updated = await db.run(
+    const saved = await db.get<DocRow>(
       `UPDATE documents SET title = $1, content = $2, version = version + 1, updated_at = now()
-       WHERE id = $3 AND version = $4`,
+       WHERE id = $3 AND version = $4 RETURNING *`,
       [title, content, doc.id, expected],
     );
-    if (updated === 0) throw conflict;
-    const saved = (await db.get<DocRow>("SELECT * FROM documents WHERE id = $1", [doc.id]))!;
+    if (!saved) throw conflict;
     await recordVersion(saved, userId, kind);
     return saved;
   }
@@ -183,6 +196,8 @@ export function createApp(db: DB, opts: AppOptions) {
   api.post("/documents/import", upload.single("file"), async (req, res) => {
     if (!req.file) throw new HttpError(400, `No file uploaded. Supported: ${IMPORT_TYPES.join(", ")}`);
     const { title, html } = await importFile(req.file.originalname, req.file.buffer);
+    // Conversion can grow the content (e.g. Markdown → HTML); never create a doc that can't be saved again.
+    if (html.length > MAX_CONTENT) throw new HttpError(413, "This file is too large once converted to a document. Try a smaller file.");
     res.status(201).json(await serializeDoc(await createDoc(req.user!.id, title, html), "owner"));
   });
 
@@ -197,9 +212,10 @@ export function createApp(db: DB, opts: AppOptions) {
     const body = req.body ?? {};
     if (body.title === undefined && body.content === undefined) throw new HttpError(400, "Nothing to update");
     // Optimistic concurrency: reject stale writes instead of silently clobbering a collaborator.
+    const expected = validVersion(body.version, doc.version);
     const title = body.title === undefined ? doc.title : validTitle(body.title);
     const content = body.content === undefined ? doc.content : validContent(body.content);
-    const saved = await writeDoc(doc, body.version ?? doc.version, title, content, req.user!.id, "edit");
+    const saved = await writeDoc(doc, expected, title, content, req.user!.id, "edit");
     res.json(await serializeDoc(saved, role));
   });
 
@@ -235,7 +251,7 @@ export function createApp(db: DB, opts: AppOptions) {
     requireRole(role, ["owner", "editor"]);
     const v = await loadVersion(doc.id, req.params.versionId);
     // Restoring is itself a new version, so it can be undone from history too.
-    const saved = await writeDoc(doc, req.body?.version ?? doc.version, v.title, v.content, req.user!.id, "restore");
+    const saved = await writeDoc(doc, validVersion(req.body?.version, doc.version), v.title, v.content, req.user!.id, "restore");
     res.json(await serializeDoc(saved, role));
   });
 
@@ -249,10 +265,14 @@ export function createApp(db: DB, opts: AppOptions) {
   api.get("/documents/:id/export", async (req, res) => {
     const { doc } = await loadDoc(req.params.id, req.user!.id);
     const format = req.query.format === "html" ? "html" : "md";
-    const safeName = doc.title.replace(/[^\w\- ]+/g, "").trim() || "document";
+    const asciiName = doc.title.replace(/[^\w\- ]+/g, "").trim() || "document";
     const body = format === "md" ? `# ${doc.title}\n\n${toMarkdown(doc.content)}\n` : doc.content;
     res.setHeader("Content-Type", format === "md" ? "text/markdown; charset=utf-8" : "text/html; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="${safeName}.${format}"`);
+    // ASCII fallback + RFC 5987 UTF-8 name so titles like "Résumé" survive.
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${asciiName}.${format}"; filename*=UTF-8''${encodeURIComponent(`${doc.title}.${format}`)}`,
+    );
     res.send(body);
   });
 
@@ -261,6 +281,7 @@ export function createApp(db: DB, opts: AppOptions) {
     const { doc, role } = await loadDoc(req.params.id, req.user!.id);
     requireRole(role, ["owner"]);
     const email = String(req.body?.email ?? "").trim().toLowerCase();
+    if (!email) throw new HttpError(400, "Email is required");
     const shareRole = req.body?.role ?? "editor";
     if (!["viewer", "editor"].includes(shareRole)) throw new HttpError(400, "Role must be viewer or editor");
     const target = await db.get<{ id: number }>("SELECT id FROM users WHERE email = $1", [email]);

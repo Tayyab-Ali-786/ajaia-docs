@@ -120,7 +120,22 @@ await alice.waitForSelector(".alert.error");
 check((await alice.$eval(".alert.error", (e) => e.textContent)).includes("Unsupported file type"), "unsupported upload shows error");
 await page_shot(alice, "05-list-owner");
 
+// ---- "Switch user" right after typing must not lose the edit (unmount flush before logout)
+await clickText(alice, "button", "New document");
+await alice.waitForSelector(".tiptap");
+const quickId = alice.url().split("/d/")[1];
+await alice.click(".tiptap");
+await alice.keyboard.type("typed then signed out");
+await clickText(alice, "button", "Switch user"); // well inside the 800 ms autosave debounce
+await alice.waitForSelector(".user-pick");
+await clickText(alice, ".user-pick", "Alice");
+await alice.waitForSelector(".doc-section");
+await alice.goto(`${BASE}/d/${quickId}`, { waitUntil: "networkidle0" });
+await alice.waitForSelector(".tiptap");
+check((await alice.$eval(".tiptap", (e) => e.textContent)).includes("typed then signed out"), "edit saved when switching user immediately");
+
 // ---- doc deleted while open: save must stop with a clear message, not retry in a loop
+await alice.goto(BASE, { waitUntil: "networkidle0" });
 await clickText(alice, "button", "New document");
 await alice.waitForSelector(".tiptap");
 const goneId = alice.url().split("/d/")[1];

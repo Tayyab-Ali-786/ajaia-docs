@@ -124,6 +124,31 @@ describe("documents, sharing & access control", () => {
     await alice.post("/api/documents/whatever/shares").send({ email: "a@b.c" }).expect(404);
   });
 
+  it("handles edge-case input safely", async () => {
+    const alice = await agentFor(app, 1);
+    const { body: doc } = await alice.post("/api/documents").send({ title: "Ré\nsumé\t2026" }).expect(201);
+    expect(doc.title).toBe("Ré sumé 2026"); // whitespace collapsed
+
+    // Malformed versions are a 400, not a misleading 409 or a DB-level 500.
+    for (const version of ["1", 1.5, 0, 2 ** 40])
+      await alice.patch(`/api/documents/${doc.id}`).send({ content: "<p>x</p>", version }).expect(400);
+
+    await alice.post(`/api/documents/${doc.id}/shares`).send({ email: "  " }).expect(400);
+    await alice.post(`/api/documents/${doc.id}/shares`).send({ email: "Alice@AJAIA.test" }).expect(400); // owner, case-insensitive
+    await alice.get(`/api/documents/${doc.id}/versions/not-a-number`).expect(404);
+
+    // Non-ASCII titles survive export via RFC 5987 filename*.
+    const exp = await alice.get(`/api/documents/${doc.id}/export`).expect(200);
+    expect(exp.headers["content-disposition"]).toContain("filename*=UTF-8''R%C3%A9%20sum%C3%A9%202026.md");
+
+    // A file under the 2 MB upload limit that converts to > 1 MB of HTML is refused,
+    // instead of creating a document that could never be saved again.
+    await alice
+      .post("/api/documents/import")
+      .attach("file", Buffer.from("a\n\n".repeat(600_000)), "big.md")
+      .expect(413);
+  });
+
   it("imports .md and .txt into new documents and rejects unsupported types", async () => {
     const alice = await agentFor(app, 1);
     const md = await alice
