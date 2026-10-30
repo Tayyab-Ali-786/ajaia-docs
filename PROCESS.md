@@ -1,30 +1,44 @@
-# PROCESS.md — AI Usage Log
+# PROCESS.md: AI Usage Log
 
-Running log of key prompts, what AI produced, and what I kept / changed / rejected (and why).
-Tool: Claude Code (CLI agent, Claude Opus) as pair programmer in the repo + terminal.
+## Summary
 
-| # | Time | Prompt (summary) | AI output | Kept / Changed / Rejected | Why |
-|---|------|------------------|-----------|---------------------------|-----|
-| 0 | 15:59 | Set up workspace, process log, decisions log | Scaffolding files | Kept | Establish logging habit before work starts |
-| 1 | 16:00 | "Explain the problem, gather info, research, then plan" (pasted full brief) | Problem breakdown, env check (node 24, railway CLI, gh), stack options, timeboxed plan, traps (real-time collab, deploy risk, video time) | Kept | Plan before code; tooling verified so deploy choice is grounded in what's actually installed |
-| 2 | 16:05 | "go" — scaffold + backend | Express API, SQLite schema, mocked auth, access-control helper, import pipeline, sanitizer | Kept, with AI-proposed refinements I accepted: 404 (not 403) for docs you can't see; optimistic-concurrency `version` column | 404 avoids leaking document existence; `version` prevents two editors silently overwriting each other |
-| 3 | 16:10 | Tests for access control | 7 Vitest+Supertest tests (auth, CRUD round-trip, viewer/editor/revoke, 409 stale write, XSS sanitize, validation, import) | Kept — all green first run | Tests target the riskiest logic (permissions) not trivia |
-| 4 | 16:12 | Frontend | React + TipTap editor, toolbar, autosave queue, share dialog, list w/ owned vs shared | Kept; dropped `@tiptap/extension-underline` after checking TipTap v3 StarterKit already bundles Underline | Verified in `node_modules` types instead of trusting the AI's first install list |
-| 5 | 16:15 | Deploy to Railway | CLI commands | **Failure, caught & reported:** `railway init` errored (multiple workspaces) and subsequent commands silently used a different project linked from a parent directory | Lesson: verify `railway status` before mutating commands. Stopped, reported to me, asked before any cleanup |
-| 6 | 16:17 | Railway trial expired → choose alternative | Options w/ tradeoffs (pay / Render+Turso / ephemeral SQLite) | Chose Render + Turso (free, real persistence) | Brief forbids reviewer cost, not author cost — but free path keeps it simple to hand over |
-| 7 | 16:18 | Swap `node:sqlite` → `@libsql/client` | Thin `DB` wrapper (`get/all/run`) + scripted mechanical refactor of call sites | Kept; AI also moved version check into `UPDATE … WHERE version = ?` and added explicit share cleanup on delete | Atomic concurrency check; remote libSQL doesn't guarantee `PRAGMA foreign_keys` per connection |
-| 8 | 16:30 | "Verify the UI in a real browser" | Chrome extension tools unavailable → AI found local `google-chrome`, wrote a 2-user puppeteer-core E2E (11 checks) + screenshots | Kept, committed as `npm run e2e` | Tests the real UI, not just the API |
-| 9 | 16:33 | Investigate E2E failures | (a) "rename not persisted" → stored title `Untitled documenQ4 Launch Plant` proved a **test** bug (triple-click didn't select); (b) import timeout → transient | Fixed the test, not the app | Read the data before "fixing" code |
-| 10 | 16:35 | Review screenshots | Spotted default-blue export link, loose list spacing, missing Delete button in UI | Fixed all three | Visual review catches what assertions don't |
-| 11 | 16:37 | Draft README / ARCHITECTURE / AI_WORKFLOW / SUBMISSION | Drafts | Kept; trimmed | Concise, reviewer-first structure |
-| 12 | 16:42 | "Switch to Supabase" | Listed orgs (read-only), created a dedicated `ajaia-docs` project with an explicit `--org-id`, us-west-1 | Kept | Explicit target avoids CLI defaults (lesson from Railway) |
-| 13 | 16:45 | Port to Postgres | `pg` pool for prod + PGlite (WASM Postgres) for tests/local; `?`→`$n`; quoted camelCase aliases; `now()`; cascade restored | Kept; 7/7 tests green | Same dialect in tests and prod; zero-install local dev |
-| 14 | 16:50 | Connect to Supabase | Found direct host is IPv6-only → linked CLI in scratchpad to get IPv4 session-pooler URL; password kept in a local 600-perm file | Kept | Render free can't reach IPv6; secrets never in chat/repo |
-| 15 | 16:53 | E2E against Supabase | 1 failure → diagnosed as test race (list still "Loading…"), fixed wait condition; 10/10 pass; wiped test data | Kept | Remote DB latency exposed a test assumption, not an app bug |
-| 16 | 16:47 | Deploy to Render | Confirmed only one (personal) Render workspace before creating anything; created service via CLI with env vars injected from local secret file (DB URL never shown in chat) | Kept | Applied the Railway lesson: verify the target before mutating |
-| 17 | 16:52 | Verify production | Same 10-check E2E against the live URL: all pass; deep links 200; unauth API 401; wiped E2E data so reviewers start clean | Kept | Verify the thing reviewers will actually use |
-| 18 | 16:55 | "Is a proper auth flow required?" | Quoted brief (mocked auth explicitly allowed); recommended against building it (reviewer friction, not graded, late risk) | Agreed | Spend time where it's evaluated |
-| 19 | 16:57 | Build version history | Schema + coalescing via single conditional UPDATE; restore through same version-checked write; History panel w/ preview; +1 API test, +4 E2E checks | Kept | Restore-as-new-version makes it undoable and conflict-safe |
-| 20 | 17:05 | I reported: pasting an image → "Document not found", screen flickering; asked for a center-align toggle | Diagnosis: 404 because the local server had been restarted on a fresh DB (environment), **but** flicker was a real bug: autosave retried every failure forever | Fixed: classified failures (stop / wait for edit / backoff), image paste → clear notice, text-align (sanitizer allows only `text-align`) | Real user testing found what scripted tests missed |
-| 21 | 17:10 | New E2E checks for the fixes | Exposed 2 more bugs: `setEditable(false)` emits update → save loop; toolbar button component remounting every render | Both fixed; 17/17 E2E checks, 8/8 API tests | Writing the reproduction test before trusting the fix paid off twice |
-| 22 | 17:15 | "Review the code again: optimizations + edge cases" | 8 edge-case bugs + 3 query optimizations found; 1 optimization rejected (data-loss risk) | All fixes applied; +1 API test, +1 E2E check; mutation-checked the switch-user test (fails on old code) | Each autosave ~6 → ~4 DB round trips; no known data-loss paths left |
+| | |
+|---|---|
+| **Total time** | About 1 h 12 min to feature freeze (T+0:00 = 15:59), then finalizing |
+| **Final stack** | React 19 + TipTap v3 · Express 5 (TypeScript) · Postgres (Supabase in production, PGlite in tests and local dev) · Render |
+| **Tests** | 9 API tests (Vitest + Supertest) · 18-check, two-user, headless-Chrome E2E run, also run against production |
+| **Live** | https://ajaia-docs-mpvh.onrender.com · repo: https://github.com/Tayyab-Ali-786/ajaia-docs |
+| **Tool** | Claude Code (CLI agent, Claude Opus) as a pair programmer in the repo and terminal |
+
+**Top moments:**
+1. **I caught:** by testing manually, I saw "Save failed" flickering. The AI's first autosave retried *every* failure every 0.8 s, even errors that can never succeed (#20).
+2. **The AI caught:** in a dedicated review pass, it found that "Switch user" right after typing lost the edit. I made sure the new test can fail: with the old code restored it fails, and with the fix it passes (#22).
+3. **Reading the data before fixing:** a "rename not persisted" E2E failure turned out to be a bug in the test, not the app. The stored title was `Untitled documenQ4 Launch Plant` (#9).
+
+Columns: what I asked → what the AI produced → what I kept, changed or rejected, and why. Times are checked against `git log`.
+
+| # | T+ | Prompt (summary) | AI output | Kept / Changed / Rejected | Why |
+|---|---|---|---|---|---|
+| 0 | 0:00 | Set up a process log and a decisions log | Scaffolding files | Kept | Start the logging habit before any work |
+| 1 | 0:01 | "Explain the problem, gather info, then plan" (full brief pasted) | Breakdown, environment check (Node, deploy CLIs), stack options, timed plan, traps (real-time scope, deploy risk, video time) | Kept | Plan before code; base the stack on the tools actually installed |
+| 2 | 0:06 | "go": scaffold and backend | Express API, schema, mocked auth, one access-control helper, import pipeline, sanitizer | Kept, plus 404 (not 403) for hidden docs and a `version` column | Don't leak which documents exist; never silently overwrite a collaborator |
+| 3 | 0:11 | Tests for access control | 7 API tests: auth, round-trip, viewer/editor/revoke, 409, XSS, validation, import | Kept; all passed on the first run | Test the riskiest logic (permissions), not trivia |
+| 4 | 0:13 | Frontend | React + TipTap editor, toolbar, autosave queue, share dialog, owned vs shared lists | Changed: removed `@tiptap/extension-underline` | Checked the installed types: TipTap v3's StarterKit already includes it |
+| 5 | 0:16 | Deploy to Railway | CLI commands | **Failure, caught:** `railway init` failed (multiple workspaces), and the commands that followed used a different project linked from a parent directory. Caught before any deploy: one empty service and volume were created there, with no changes to existing resources. Flagged for removal by an admin | From then on: check the target (`railway status` / explicit IDs) before running anything that changes state |
+| 6 | 0:18 | The Railway trial had expired; pick an alternative | Options with tradeoffs (paid tier / Render + Turso / ephemeral SQLite) | Chose free hosting with real persistence | Reviewers must never pay; keep the handover simple |
+| 7 | 0:21 | Move `node:sqlite` to libSQL | Thin `DB` wrapper plus a scripted refactor; atomic `UPDATE … WHERE version = ?` | Kept | The concurrency check and the write happen in one SQL statement |
+| 8 | 0:34 | "Verify the UI in a real browser" | Found the local Chrome; two-user puppeteer-core E2E with screenshots | Kept as `npm run e2e` | Tests the real UI, not just the API |
+| 9 | 0:36 | Investigate E2E failures | "Rename not persisted" turned out to be a **test** bug (the click didn't select the existing text) | Fixed the test, not the app | Read the data before "fixing" code |
+| 10 | 0:37 | Review the screenshots | Link color, list spacing, missing Delete button | Fixed all three | Looking at the pixels catches what assertions don't |
+| 11 | 0:39 | Draft README / ARCHITECTURE / AI_WORKFLOW / SUBMISSION | Drafts | Kept; trimmed | Written for reviewers first |
+| 12 | 0:41 | Switch to Supabase | Created a dedicated Supabase project with an explicit `--org-id` to avoid CLI defaults | Kept | Name the target explicitly (the lesson from #5) |
+| 13 | 0:43 | Port to Postgres | `pg` pool in production, PGlite in tests and local dev; `$n` placeholders; quoted camelCase aliases | Kept; tests stayed green | Same SQL dialect everywhere; local dev needs no install |
+| 14 | 0:44 | Connect to Supabase | Direct host is IPv6-only, so it used the IPv4 session pooler | Kept | Render can't reach IPv6; the database password stays in a local file |
+| 15 | 0:45 | E2E against Supabase | One failure: a test timing issue (the list still said "Loading…") | Fixed the wait condition | Network latency exposed an assumption in the test |
+| 16 | 0:47 | Deploy to Render | Confirmed the Render workspace, created the service with env vars from a local file | Kept | Secrets never appear in the chat or the repo |
+| 17 | 0:49 | Verify production | Full E2E against the live URL; deleted the test data | Kept | Verify the thing reviewers will actually use |
+| 18 | 0:51 | "Is a proper auth flow required?" | Quoted the brief (mocked auth allowed); advised against building it | Agreed | A signup flow makes reviewers' testing harder, isn't graded, and adds late risk |
+| 19 | 0:58 | Build version history | Merging of quick saves, restore as a new version, history panel; +1 API test, +4 E2E checks | Kept | A restore can be undone and is conflict-safe |
+| 20 | 1:06 | Manual test: flickering "Save failed"; asked for text alignment | Retry loop fixed (failures classified, editor locked on 404/403); image-paste notice; alignment | Kept | Found by hand; details in ARCHITECTURE.md › Save failures |
+| 21 | 1:06 | New E2E checks for those fixes | They found 2 more bugs: `setEditable` caused another save loop, and the toolbar remounted on every render | Both fixed | Writing the reproduction test before trusting the fix paid off twice |
+| 22 | 1:11 | "Review again: optimizations and edge cases" | 8 edge cases fixed, about 6 → 4 database round trips per save, 1 optimization rejected | Kept; checked that the new test fails on the old code | Details in AI_WORKFLOW.md and ARCHITECTURE.md › Performance |

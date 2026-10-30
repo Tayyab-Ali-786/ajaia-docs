@@ -1,8 +1,8 @@
-# Ajaia Docs — lightweight collaborative document editor
+# Ajaia Docs: a lightweight collaborative document editor
 
 A small full-stack Google-Docs-style editor: create, format, rename and autosave documents, import files, and share with other users as **viewer** or **editor**.
 
-- **Live app:** https://ajaia-docs-mpvh.onrender.com (Render free tier; the first load after idle can take ~30 s to wake up)
+- **Live app:** https://ajaia-docs-mpvh.onrender.com (Render free tier: after about 15 minutes idle, the first load takes **about 30–50 s** to wake up)
 - **Source:** https://github.com/Tayyab-Ali-786/ajaia-docs
 - **Walkthrough video:** see `VIDEO_URL.txt`
 
@@ -43,6 +43,8 @@ npm start              # http://localhost:3001  (embedded Postgres in data/pgdat
 
 Dev mode with hot reload: `npm run dev:server` and `npm run dev:client` in two terminals → http://localhost:5173 (Vite proxies `/api` to :3001).
 
+Configuration is optional; every value has a working local default. To override one, `cp .env.example .env` and edit it. `.env` is loaded automatically and is git-ignored.
+
 | Env var | Default | Purpose |
 |---|---|---|
 | `PORT` | `3001` | HTTP port |
@@ -53,7 +55,8 @@ Dev mode with hot reload: `npm run dev:server` and `npm run dev:client` in two t
 
 ```bash
 npm test         # 9 API tests (Vitest + Supertest, in-memory PGlite Postgres)
-npm run e2e      # headless-Chrome UI run against a running server; writes docs/screenshots/
+npm run e2e      # headless-Chrome UI run against a running server (npm start in another terminal); writes docs/screenshots/
+npm run e2e -- https://ajaia-docs-mpvh.onrender.com /tmp/shots   # same run against any URL
 npm run typecheck
 ```
 
@@ -74,7 +77,7 @@ npm run typecheck
   - Bob sees a read-only view, and can browse history but not restore
   - text alignment persists, a document deleted while open stops saving after one request (no retry loop), and "Switch user" right after typing doesn't lose the edit
 
-  `CHROME_PATH` overrides the browser path.
+  The E2E run needs a local Chrome or Chromium (default `/usr/bin/google-chrome`; set `CHROME_PATH` to override). It creates documents, so run it against a fresh database.
 
 ## Deploy (Render + Supabase, both free)
 

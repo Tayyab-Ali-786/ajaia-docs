@@ -45,6 +45,28 @@ All permission logic goes through one function, `loadDoc(docId, userId) → { do
   - It flushes when you leave the page and warns before you close the tab with unsaved changes.
 - **Optimistic concurrency.** `UPDATE … WHERE id = ? AND version = ?` makes the version check and the write a single atomic step. If another editor saved in between, the API returns 409 and the UI says "changed by someone else — Reload". That's the cheap, correct alternative to real-time merging (CRDTs).
 
+## Save failures
+
+The client sorts every failed save into one of three groups, because retrying blindly caused a visible retry loop (found during manual testing):
+
+| Failure | Behavior |
+|---|---|
+| **Permanent**: 404 (deleted or access removed), 403 (downgraded to viewer), 401 (signed out), 409 (someone else saved first) | Saving stops, the editor locks (`setEditable(false, false)`, so no update event fires and no further save is queued), and a clear message is shown. 409 offers "Reload". |
+| **Content rejected**: 400 or 413 | Edits stay in the tab, the reason is shown, and the save retries after the user's next change. A bad title goes back to the last saved one. |
+| **Temporary**: network or 5xx (for example, a Render cold start) | Edits stay in the tab and the save retries automatically, waiting longer each time (0.8 s up to 30 s). |
+
+Other cases that can lose work:
+- "Switch user" unmounts the editor synchronously (`flushSync`), so the final save goes out before the logout request.
+- Closing the tab with unsaved changes asks for confirmation.
+
+## Performance
+
+- Each autosave makes about 4 database round trips, down from about 6:
+  - `loadDoc` fetches the document and the caller's role in one `LEFT JOIN`.
+  - Writes use `UPDATE … RETURNING *` instead of a separate read.
+  - The response loads the owner and the share list in parallel.
+- **Considered and rejected:** computing the editor HTML only at save time instead of on every change. It's cheaper, but the final save on unmount could run after the editor is destroyed and lose the edit.
+
 ## Version history
 
 - **Every successful save adds a history entry**, written alongside the version-checked update.
@@ -73,7 +95,7 @@ All permission logic goes through one function, `loadDoc(docId, userId) → { do
 
 ## Tradeoffs worth knowing
 
-- **Render free tier** goes to sleep when idle, so the first request takes about 30 s.
+- **Render free tier** goes to sleep after about 15 minutes idle, so the first request after that takes about 30–50 s. The client treats that as a temporary error and retries the save.
 - **PGlite for tests and local dev** runs the same Postgres engine as production, so tests check the real SQL (placeholders, `ON CONFLICT`, cascades) and running locally doesn't need a database install.
 - **Supabase's direct database host is IPv6-only.** Production connects through the session pooler (IPv4).
 - The mocked session cookie stores only the user id. It's signed (it can't be forged), but it's not a production-grade session. Replacing it with real auth only touches `requireUser`.
