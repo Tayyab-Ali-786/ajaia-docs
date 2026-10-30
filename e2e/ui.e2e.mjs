@@ -80,6 +80,25 @@ await alice.waitForFunction(() => document.querySelector(".share-list")?.textCon
 await page_shot(alice, "03-share-dialog");
 await clickText(alice, ".modal-footer button", "Done");
 
+// ---- version history: restore the original "created" version, then restore back
+await clickText(alice, "button", "History");
+await alice.waitForSelector(".history-item");
+const entries = await alice.$$eval(".history-item", (els) => els.map((e) => e.textContent));
+check(entries.length >= 2 && entries.at(-1).includes("Created by Alice Chen"), `history lists entries (${entries.length})`);
+await page_shot(alice, "08-version-history");
+await clickText(alice, ".history-item", "Created");
+await alice.waitForFunction(() => document.querySelector(".history-preview .preview-title")?.textContent === "Untitled document");
+await clickText(alice, ".modal-footer button", "Restore this version");
+await alice.waitForFunction(() => !document.querySelector(".modal") && document.querySelector(".title-input")?.value === "Untitled document");
+check(!(await alice.$("h1")), "restore brought back the original (empty) version");
+await clickText(alice, "button", "History");
+await alice.waitForSelector(".history-item");
+await clickText(alice, ".history-item", "Edited");
+await alice.waitForFunction(() => document.querySelector(".history-preview h1")?.textContent === "Launch goals");
+await clickText(alice, ".modal-footer button", "Restore this version");
+await alice.waitForFunction(() => document.querySelector(".title-input")?.value === "Q4 Launch Plan" && document.querySelector(".tiptap h1"));
+check(true, "restore back to the edited version (undo a restore)");
+
 // ---- import a markdown file
 await alice.goto(BASE, { waitUntil: "networkidle0" });
 const mdPath = path.join(os.tmpdir(), "meeting-notes.md");
@@ -111,6 +130,9 @@ await bob.waitForSelector(".tiptap");
 check((await bob.$eval(".tiptap", (e) => e.getAttribute("contenteditable"))) === "false", "viewer editor is read-only");
 check(!(await bob.$(".toolbar")), "viewer has no toolbar");
 await page_shot(bob, "07-viewer-readonly");
+await clickText(bob, "button", "History");
+await bob.waitForSelector(".history-item");
+check((await bob.$eval(".modal-footer", (e) => e.textContent)).includes("View-only access"), "viewer can browse history but not restore");
 
 console.log(errors.length ? `CONSOLE ERRORS:\n${errors.join("\n")}` : "PASS no console errors");
 await browser.close();

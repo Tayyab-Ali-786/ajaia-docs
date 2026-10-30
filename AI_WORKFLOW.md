@@ -20,7 +20,7 @@
   - the TipTap toolbar wiring
   - the CSS
 
-  This was about 1,000 lines in roughly 25 minutes. All 7 API tests passed on their first run.
+  This was about 1,000 lines in roughly 25 minutes. All 7 initial API tests passed on their first run.
 - **Two mid-build infrastructure switches.** The Railway trial turned out to be expired, so persistence moved from `node:sqlite` to libSQL. When I chose Supabase instead, it moved again to Postgres. Each time the AI used a thin `DB` wrapper (`get/all/run`) plus a scripted, assertion-checked refactor of every call site. Tests stayed green after each switch (about 5–15 minutes each).
 - **Setting up Supabase from the CLI.** I created a dedicated project with an explicit `--org-id` so the CLI couldn't fall back to a default. The AI noticed that the direct host is IPv6-only and fetched the IPv4 session-pooler URL. The database password stayed in a local file and never appeared in the chat or the repo.
 - **Verification I wouldn't normally write for a take-home.** A two-user headless-Chrome run that checks formatting persistence, sharing and read-only mode, and produces the screenshots.
@@ -41,7 +41,7 @@
 ## How I verified correctness, UX and reliability
 
 - **Correctness:**
-  - 7 API tests on an in-memory database: auth, the formatting round-trip, the whole sharing path, 409 conflicts, XSS sanitization, validation, import.
+  - 8 API tests on an in-memory Postgres (PGlite): auth, the formatting round-trip, the whole sharing path, 409 conflicts, version history, XSS sanitization, validation, import.
   - `tsc --noEmit` with strict mode.
 - **UX:** the headless-Chrome run drives the real UI as two users (toolbar, shortcuts, reload, share dialog, import, rejected upload, viewer read-only), and I reviewed every screenshot. That led to small fixes (link color, list spacing) and to adding a missing Delete button.
 - **Reliability:**

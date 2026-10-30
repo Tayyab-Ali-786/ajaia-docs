@@ -23,6 +23,7 @@ One deployable unit: the API and the frontend ship together, there's no CORS, an
 users(id, email UNIQUE, name)
 documents(id uuid, owner_id → users, title, content HTML, version, created_at, updated_at)
 document_shares(document_id, user_id, role ∈ {viewer, editor}, PK(document_id, user_id))
+document_versions(id, document_id, version, title, content, kind ∈ {created, edit, restore}, created_by, created_at, saved_at)
 ```
 
 Ownership is a column, not a share row. So "owned" and "shared with me" are two simple queries, and an owner can never be downgraded by mistake.
@@ -44,6 +45,13 @@ All permission logic goes through one function, `loadDoc(docId, userId) → { do
   - It flushes when you leave the page and warns before you close the tab with unsaved changes.
 - **Optimistic concurrency.** `UPDATE … WHERE id = ? AND version = ?` makes the version check and the write a single atomic step. If another editor saved in between, the API returns 409 and the UI says "changed by someone else — Reload". That's the cheap, correct alternative to real-time merging (CRDTs).
 
+## Version history
+
+- **Every successful save adds a history entry**, written alongside the version-checked update.
+- **Autosave would flood the list,** so an `edit` by the same user within 2 minutes of their latest `edit` entry updates that entry instead (a single conditional `UPDATE`). `created` and `restore` entries are never merged into.
+- **Restore** goes through the same version-checked write, as a `restore` entry. That makes it conflict-safe, and it can itself be undone.
+- **Permissions:** viewers can browse; restoring needs editor or owner.
+
 ## File import
 
 `.txt` and `.md` convert directly, and `.docx` goes through `mammoth`. All three produce a new document. The limit is 2 MB and anything else is rejected, and the supported types are listed in the UI. Importing as a new document was the flow most useful to a product user ("bring my existing notes in") and the least ambiguous one.
@@ -60,7 +68,7 @@ All permission logic goes through one function, `loadDoc(docId, userId) → { do
 |---|---|
 | Real-time co-editing (Yjs + WebSockets) and presence | Several hours of work with high risk. Version-based conflict detection covers the important part (no silent data loss). |
 | Real auth (passwords, OAuth) | The brief allows mocked users, and the access-control logic underneath is real. |
-| Comments, version history, attachments | Optional extras. I picked **export to Markdown** and **viewer/editor roles** because they were cheap and worth having. |
+| Comments, attachments | Optional extras. I picked **viewer/editor roles**, **export to Markdown** and **version history** because each was cheap, low-risk and worth having. |
 | Pagination, search | Not needed at this data size. |
 
 ## Tradeoffs worth knowing

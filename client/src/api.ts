@@ -5,6 +5,9 @@ export interface Doc {
   id: string; title: string; content: string; version: number;
   createdAt: string; updatedAt: string; owner: User; role: Role; shares: Share[];
 }
+export interface VersionSummary {
+  id: number; version: number; title: string; kind: "created" | "edit" | "restore"; savedAt: string; authorName: string;
+}
 export interface DocSummary { id: string; title: string; updatedAt: string; role?: Role; ownerName?: string }
 
 export class ApiError extends Error {
@@ -47,6 +50,12 @@ export const api = {
     fd.append("file", file);
     return req<Doc>("POST", "/documents/import", fd);
   },
+
+  versions: (id: string) => req<VersionSummary[]>("GET", `/documents/${id}/versions`),
+  version: (id: string, versionId: number) =>
+    req<{ id: number; title: string; content: string; version: number }>("GET", `/documents/${id}/versions/${versionId}`),
+  restoreVersion: (id: string, versionId: number, version: number) =>
+    req<Doc>("POST", `/documents/${id}/versions/${versionId}/restore`, { version }),
 
   share: (id: string, email: string, role: "viewer" | "editor") =>
     req<Share[]>("POST", `/documents/${id}/shares`, { email, role }),

@@ -72,6 +72,35 @@ describe("documents, sharing & access control", () => {
     await alice.patch(`/api/documents/${doc.id}`).send({ content: "<p>b</p>", version: doc.version }).expect(409);
   });
 
+  it("keeps version history: coalesces autosaves, lets viewers browse, only editors restore", async () => {
+    const alice = await agentFor(app, 1);
+    const bob = await agentFor(app, 2);
+    const carol = await agentFor(app, 3);
+    let { body: doc } = await alice.post("/api/documents").send({ title: "Spec", content: "<p>v1</p>" }).expect(201);
+
+    // Two quick saves by the same user fold into one 'edit' entry (on top of 'created').
+    for (const c of ["<p>draft</p>", "<p>v2</p>"])
+      doc = (await alice.patch(`/api/documents/${doc.id}`).send({ content: c, version: doc.version }).expect(200)).body;
+    let history = (await alice.get(`/api/documents/${doc.id}/versions`).expect(200)).body;
+    expect(history.map((v: any) => v.kind)).toEqual(["edit", "created"]);
+    expect((await alice.get(`/api/documents/${doc.id}/versions/${history[0].id}`)).body.content).toBe("<p>v2</p>");
+
+    // Share as viewer: can browse history but not restore.
+    await alice.post(`/api/documents/${doc.id}/shares`).send({ email: "bob@ajaia.test", role: "viewer" }).expect(201);
+    const created = history[1];
+    await bob.get(`/api/documents/${doc.id}/versions`).expect(200); // viewers can browse
+    await bob.post(`/api/documents/${doc.id}/versions/${created.id}/restore`).send({}).expect(403);
+    await carol.get(`/api/documents/${doc.id}/versions`).expect(404); // outsiders can't
+
+    // Restore brings back v1 content as a NEW version (so it's undoable).
+    const restored = (await alice.post(`/api/documents/${doc.id}/versions/${created.id}/restore`).send({ version: doc.version }).expect(200)).body;
+    expect(restored.content).toBe("<p>v1</p>");
+    expect(restored.version).toBe(doc.version + 1);
+    history = (await alice.get(`/api/documents/${doc.id}/versions`)).body;
+    expect(history.map((v: any) => v.kind)).toEqual(["restore", "edit", "created"]);
+    await alice.post(`/api/documents/${doc.id}/versions/${created.id}/restore`).send({ version: doc.version }).expect(409); // stale
+  });
+
   it("sanitizes stored HTML (no script injection via content)", async () => {
     const alice = await agentFor(app, 1);
     const { body } = await alice

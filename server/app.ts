@@ -24,6 +24,7 @@ export class HttpError extends Error {
 
 const MAX_TITLE = 200;
 const MAX_CONTENT = 1_000_000; // ~1 MB of HTML
+const COALESCE_WINDOW = "2 minutes"; // same-user edits within this window share one history entry
 
 export interface AppOptions { sessionSecret: string; clientDir?: string }
 
@@ -95,7 +96,43 @@ export function createApp(db: DB, opts: AppOptions) {
   async function createDoc(ownerId: number, title: string, content: string) {
     const id = crypto.randomUUID();
     await db.run("INSERT INTO documents (id, owner_id, title, content) VALUES ($1, $2, $3, $4)", [id, ownerId, title, content]);
-    return (await db.get<DocRow>("SELECT * FROM documents WHERE id = $1", [id]))!;
+    const doc = (await db.get<DocRow>("SELECT * FROM documents WHERE id = $1", [id]))!;
+    await recordVersion(doc, ownerId, "created");
+    return doc;
+  }
+
+  /** Append a history entry, or fold an edit into the latest one if it's the same user's recent edit. */
+  async function recordVersion(doc: DocRow, userId: number, kind: "created" | "edit" | "restore") {
+    if (kind === "edit") {
+      const folded = await db.run(
+        `UPDATE document_versions SET version = $1, title = $2, content = $3, saved_at = now()
+         WHERE id = (SELECT id FROM document_versions WHERE document_id = $4 ORDER BY id DESC LIMIT 1)
+           AND kind = 'edit' AND created_by = $5 AND created_at > now() - $6::interval`,
+        [doc.version, doc.title, doc.content, doc.id, userId, COALESCE_WINDOW],
+      );
+      if (folded) return;
+    }
+    await db.run(
+      `INSERT INTO document_versions (document_id, version, title, content, kind, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [doc.id, doc.version, doc.title, doc.content, kind, userId],
+    );
+  }
+
+  /** Version-checked write (optimistic concurrency) + history entry. */
+  async function writeDoc(doc: DocRow, expected: number, title: string, content: string, userId: number, kind: "edit" | "restore") {
+    const conflict = new HttpError(409, "This document was changed by someone else. Reload to get the latest version.");
+    if (expected !== doc.version) throw conflict;
+    // The version check lives in the WHERE clause so it's atomic even with concurrent requests.
+    const updated = await db.run(
+      `UPDATE documents SET title = $1, content = $2, version = version + 1, updated_at = now()
+       WHERE id = $3 AND version = $4`,
+      [title, content, doc.id, expected],
+    );
+    if (updated === 0) throw conflict;
+    const saved = (await db.get<DocRow>("SELECT * FROM documents WHERE id = $1", [doc.id]))!;
+    await recordVersion(saved, userId, kind);
+    return saved;
   }
 
   // ---- auth (mocked: pick a seeded user) --------------------------------
@@ -160,20 +197,46 @@ export function createApp(db: DB, opts: AppOptions) {
     const body = req.body ?? {};
     if (body.title === undefined && body.content === undefined) throw new HttpError(400, "Nothing to update");
     // Optimistic concurrency: reject stale writes instead of silently clobbering a collaborator.
-    // The version check lives in the WHERE clause so it's atomic even with concurrent requests.
-    const conflict = new HttpError(409, "This document was changed by someone else. Reload to get the latest version.");
-    const expected = body.version ?? doc.version;
-    if (expected !== doc.version) throw conflict;
-
     const title = body.title === undefined ? doc.title : validTitle(body.title);
     const content = body.content === undefined ? doc.content : validContent(body.content);
-    const updated = await db.run(
-      `UPDATE documents SET title = $1, content = $2, version = version + 1, updated_at = now()
-       WHERE id = $3 AND version = $4`,
-      [title, content, doc.id, expected],
+    const saved = await writeDoc(doc, body.version ?? doc.version, title, content, req.user!.id, "edit");
+    res.json(await serializeDoc(saved, role));
+  });
+
+  // ---- version history ---------------------------------------------------
+  api.get("/documents/:id/versions", async (req, res) => {
+    const { doc } = await loadDoc(req.params.id, req.user!.id);
+    res.json(
+      await db.all(
+        `SELECT v.id, v.version, v.title, v.kind, v.saved_at AS "savedAt", u.name AS "authorName"
+         FROM document_versions v JOIN users u ON u.id = v.created_by
+         WHERE v.document_id = $1 ORDER BY v.id DESC LIMIT 100`,
+        [doc.id],
+      ),
     );
-    if (updated === 0) throw conflict;
-    res.json(await serializeDoc((await loadDoc(doc.id, req.user!.id)).doc, role));
+  });
+
+  async function loadVersion(docId: string, versionId: string) {
+    const v = await db.get<{ id: number; title: string; content: string; version: number }>(
+      "SELECT id, title, content, version FROM document_versions WHERE id = $1 AND document_id = $2",
+      [Number(versionId) || 0, docId],
+    );
+    if (!v) throw new HttpError(404, "Version not found");
+    return v;
+  }
+
+  api.get("/documents/:id/versions/:versionId", async (req, res) => {
+    const { doc } = await loadDoc(req.params.id, req.user!.id);
+    res.json(await loadVersion(doc.id, req.params.versionId));
+  });
+
+  api.post("/documents/:id/versions/:versionId/restore", async (req, res) => {
+    const { doc, role } = await loadDoc(req.params.id, req.user!.id);
+    requireRole(role, ["owner", "editor"]);
+    const v = await loadVersion(doc.id, req.params.versionId);
+    // Restoring is itself a new version, so it can be undone from history too.
+    const saved = await writeDoc(doc, req.body?.version ?? doc.version, v.title, v.content, req.user!.id, "restore");
+    res.json(await serializeDoc(saved, role));
   });
 
   api.delete("/documents/:id", async (req, res) => {

@@ -28,6 +28,7 @@ Sign-in is mocked: pick a seeded user on the login screen (no password).
 | Sharing | Owner shares by email as **viewer** (read-only) or **editor**, changes the role, or revokes access. The list separates **My documents** from **Shared with me** (with role + owner). |
 | Persistence | Documents, formatting (stored as sanitized HTML) and shares are kept in Postgres: Supabase in production, embedded PGlite (Postgres compiled to WASM) locally and in tests. |
 | Conflict safety | Every save carries a version number. If someone else saved first, you get a "Reload" prompt (HTTP 409) instead of silently overwriting their work. |
+| Version history | **History** lists saved versions with the author and time, previews any of them, and lets editors or owners restore one. A restore is itself a new version, so it can be undone. Quick autosaves by the same person within 2 minutes merge into one entry. |
 | Export | Download any document you can open as Markdown. |
 
 ## Run locally
@@ -51,7 +52,7 @@ Dev mode with hot reload: `npm run dev:server` and `npm run dev:client` in two t
 ## Tests
 
 ```bash
-npm test         # 7 API tests (Vitest + Supertest, in-memory PGlite Postgres)
+npm test         # 8 API tests (Vitest + Supertest, in-memory PGlite Postgres)
 npm run e2e      # headless-Chrome UI run against a running server; writes docs/screenshots/
 npm run typecheck
 ```
@@ -61,14 +62,15 @@ npm run typecheck
   - create → edit → reopen round-trip with formatting
   - the sharing path: no access → viewer (can't edit or reshare) → editor → revoked
   - stale-write 409
+  - version history: merging of quick saves, viewers can browse but not restore, restore, stale restore
   - XSS sanitization
   - validation
   - `.md`/`.txt` import and rejection of unsupported types
 - **E2E** (`e2e/ui.e2e.mjs`) drives the real UI as Alice and Bob:
   - formatting through the toolbar and shortcuts
   - rename, reload and persistence
-  - share as viewer, import `.md`, rejected upload
-  - Bob sees a read-only view
+  - share as viewer, restore from version history and undo the restore, import `.md`, rejected upload
+  - Bob sees a read-only view, and can browse history but not restore
 
   `CHROME_PATH` overrides the browser path.
 

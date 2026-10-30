@@ -18,4 +18,6 @@ Format: **Decision** — options considered → choice → why → what we gave 
 5. **Roles** — basic access vs viewer/editor → **viewer/editor from day one** (one column + one check); covers a stretch item cheaply.
 6. **Real-time collaboration** — **deliberately skipped** (Yjs + websockets = multi-hour, high risk). Replaced with cheap, correct conflict detection (version column).
 7. **Security baseline** — server-side HTML sanitization (allow-list matching editor output) on every write *and* import; 404 for inaccessible docs (no existence leak); signed cookies.
-8. **Stretch picked** — Export to Markdown (≈15 min, high reviewer value) + roles. Skipped version history/comments.
+8. **Stretch picked**: roles + export to Markdown (cheap), then **version history** once the core was deployed and verified with about 3 hours to spare. Skipped comments and real-time collaboration.
+9. **History granularity**: one entry per save (floods the list) vs. timed snapshots (needs a background job) vs. **merging same-user edits within 2 minutes** → readable history with a single conditional `UPDATE` and no jobs. `created` and `restore` entries are never merged.
+10. **Auth**: the brief allows mocked users. Real auth was considered and **rejected** because a signup flow makes reviewers' sharing test harder, it isn't graded, and it adds risk to the demo late in the build.

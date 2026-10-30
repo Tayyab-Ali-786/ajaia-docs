@@ -3,6 +3,7 @@ import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/r
 import StarterKit from "@tiptap/starter-kit";
 import { api, ApiError, type Doc } from "./api.ts";
 import { ShareDialog } from "./ShareDialog.tsx";
+import { HistoryPanel } from "./HistoryPanel.tsx";
 
 type Status = "saved" | "dirty" | "saving" | "error" | "conflict";
 const AUTOSAVE_MS = 800;
@@ -27,16 +28,18 @@ export function DocEditor({ id, onBack }: { id: string; onBack: () => void }) {
       </main>
     );
   if (!doc) return <main className="center muted">Loading document…</main>;
-  return <LoadedEditor initial={doc} onBack={onBack} />;
+  // Keyed by version: a restore returns a new version, which remounts the editor with that content.
+  return <LoadedEditor key={doc.version} initial={doc} onBack={onBack} onReplaced={setDoc} />;
 }
 
-function LoadedEditor({ initial, onBack }: { initial: Doc; onBack: () => void }) {
+function LoadedEditor({ initial, onBack, onReplaced }: { initial: Doc; onBack: () => void; onReplaced: (d: Doc) => void }) {
   const canEdit = initial.role !== "viewer";
   const [title, setTitle] = useState(initial.title);
   const [status, setStatus] = useState<Status>("saved");
   const [saveError, setSaveError] = useState("");
   const [shares, setShares] = useState(initial.shares);
   const [shareOpen, setShareOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Autosave queue: coalesce edits, keep one request in flight, send the version we last saw.
   const version = useRef(initial.version);
@@ -132,6 +135,7 @@ function LoadedEditor({ initial, onBack }: { initial: Doc; onBack: () => void })
         />
         <SaveStatus status={status} canEdit={canEdit} />
         <div className="spacer" />
+        <button className="btn ghost" onClick={async () => { await flush(); setHistoryOpen(true); }}>History</button>
         <a className="btn ghost" href={`/api/documents/${initial.id}/export?format=md`} download>Export .md</a>
         {initial.role === "owner" && (
           <button
@@ -176,6 +180,20 @@ function LoadedEditor({ initial, onBack }: { initial: Doc; onBack: () => void })
         <EditorContent editor={editor} />
       </div>
 
+      {historyOpen && (
+        <HistoryPanel
+          docId={initial.id}
+          canRestore={canEdit}
+          beforeRestore={() => {
+            // Restore supersedes any unsaved edits; drop them so the unmount flush doesn't 409.
+            clearTimeout(timer.current);
+            pending.current = {};
+            return version.current;
+          }}
+          onRestored={onReplaced}
+          onClose={() => setHistoryOpen(false)}
+        />
+      )}
       {shareOpen && (
         <ShareDialog docId={initial.id} ownerId={initial.owner.id} shares={shares} onChange={setShares} onClose={() => setShareOpen(false)} />
       )}

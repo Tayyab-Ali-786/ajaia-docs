@@ -33,6 +33,21 @@ const SCHEMA = `
     PRIMARY KEY (document_id, user_id)
   );
   CREATE INDEX IF NOT EXISTS idx_shares_user ON document_shares(user_id);
+
+  -- Version history. kind: created | edit | restore. Consecutive 'edit' saves by the same user
+  -- within a short window are coalesced into one entry so autosave doesn't flood the history.
+  CREATE TABLE IF NOT EXISTS document_versions (
+    id          SERIAL PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    version     INTEGER NOT NULL,
+    title       TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    kind        TEXT NOT NULL CHECK (kind IN ('created', 'edit', 'restore')),
+    created_by  INTEGER NOT NULL REFERENCES users(id),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    saved_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_versions_doc ON document_versions(document_id, id DESC);
 `;
 
 type Query = (sql: string, params: unknown[]) => Promise<{ rows: unknown[]; rowCount: number }>;
