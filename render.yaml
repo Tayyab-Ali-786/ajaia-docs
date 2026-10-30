@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: ajaia-docs
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false # libsql://<db>-<org>.turso.io
+      - key: DATABASE_AUTH_TOKEN
+        sync: false

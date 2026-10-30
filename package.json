@@ -12,6 +12,7 @@
   },
   "type": "module",
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "@tiptap/pm": "^3.32.1",
     "@tiptap/react": "^3.32.1",
     "@tiptap/starter-kit": "^3.32.1",

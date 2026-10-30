@@ -12,8 +12,8 @@ async function agentFor(app: ReturnType<typeof createApp>, userId: number) {
 
 describe("documents, sharing & access control", () => {
   let app: ReturnType<typeof createApp>;
-  beforeEach(() => {
-    app = createApp(openDb(":memory:"), { sessionSecret: "test" });
+  beforeEach(async () => {
+    app = createApp(await openDb(":memory:"), { sessionSecret: "test" });
   });
 
   it("rejects unauthenticated requests", async () => {

@@ -1,8 +1,6 @@
-import { DatabaseSync } from "node:sqlite";
+import { createClient, type Client, type InArgs } from "@libsql/client";
 import fs from "node:fs";
 import path from "node:path";
-
-export type DB = DatabaseSync;
 
 export const SEED_USERS = [
   { email: "alice@ajaia.test", name: "Alice Chen" },
@@ -10,11 +8,28 @@ export const SEED_USERS = [
   { email: "carol@ajaia.test", name: "Carol Diaz" },
 ];
 
-export function openDb(file: string): DB {
-  if (file !== ":memory:") fs.mkdirSync(path.dirname(file), { recursive: true });
-  const db = new DatabaseSync(file);
-  db.exec(`
-    PRAGMA journal_mode = WAL;
+/** Thin wrapper so call sites read like a sync SQLite API: db.get / db.all / db.run. */
+export class DB {
+  constructor(readonly client: Client) {}
+  async all<T>(sql: string, args: InArgs = []): Promise<T[]> {
+    return (await this.client.execute({ sql, args })).rows as unknown as T[];
+  }
+  async get<T>(sql: string, args: InArgs = []): Promise<T | undefined> {
+    return (await this.all<T>(sql, args))[0];
+  }
+  async run(sql: string, args: InArgs = []) {
+    return this.client.execute({ sql, args });
+  }
+}
+
+/**
+ * url: ":memory:" (tests), "file:data/app.db" (local), or "libsql://<db>.turso.io" (prod, needs authToken).
+ * Same SQLite dialect everywhere, so local dev needs no external service.
+ */
+export async function openDb(url: string, authToken?: string): Promise<DB> {
+  if (url.startsWith("file:")) fs.mkdirSync(path.dirname(url.slice(5)), { recursive: true });
+  const db = new DB(createClient({ url, authToken }));
+  await db.client.executeMultiple(`
     PRAGMA foreign_keys = ON;
 
     CREATE TABLE IF NOT EXISTS users (
@@ -43,8 +58,6 @@ export function openDb(file: string): DB {
     );
     CREATE INDEX IF NOT EXISTS idx_shares_user ON document_shares(user_id);
   `);
-
-  const insert = db.prepare("INSERT OR IGNORE INTO users (email, name) VALUES (?, ?)");
-  for (const u of SEED_USERS) insert.run(u.email, u.name);
+  for (const u of SEED_USERS) await db.run("INSERT OR IGNORE INTO users (email, name) VALUES (?, ?)", [u.email, u.name]);
   return db;
 }
