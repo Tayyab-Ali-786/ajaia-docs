@@ -2,7 +2,7 @@
 
 ## Links
 
-- **Live app:** _LIVE_URL_. The first load may take about 30 s while Render's free tier wakes up.
+- **Live app:** https://ajaia-docs-mpvh.onrender.com. The first load may take about 30 s while Render's free tier wakes up.
 - **Source:** https://github.com/Tayyab-Ali-786/ajaia-docs (also included in this folder)
 - **Walkthrough video:** in `VIDEO_URL.txt`
 - **Test accounts:** pick one on the login screen; no password. Use two browsers or an incognito window to test sharing.

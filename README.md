@@ -2,7 +2,7 @@
 
 A small full-stack Google-Docs-style editor: create, format, rename and autosave documents, import files, and share with other users as **viewer** or **editor**.
 
-- **Live app:** _LIVE_URL_ (Render free tier; the first load after idle can take ~30 s to wake up)
+- **Live app:** https://ajaia-docs-mpvh.onrender.com (Render free tier; the first load after idle can take ~30 s to wake up)
 - **Source:** https://github.com/Tayyab-Ali-786/ajaia-docs
 - **Walkthrough video:** see `VIDEO_URL.txt`
 
