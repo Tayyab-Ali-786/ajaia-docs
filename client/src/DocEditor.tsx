@@ -133,6 +133,25 @@ function LoadedEditor({ initial, onBack }: { initial: Doc; onBack: () => void })
         <SaveStatus status={status} canEdit={canEdit} />
         <div className="spacer" />
         <a className="btn ghost" href={`/api/documents/${initial.id}/export?format=md`} download>Export .md</a>
+        {initial.role === "owner" && (
+          <button
+            className="btn ghost"
+            onClick={async () => {
+              if (!confirm(`Delete "${title}"? This can't be undone and removes access for everyone it's shared with.`)) return;
+              clearTimeout(timer.current);
+              pending.current = {};
+              try {
+                await api.deleteDoc(initial.id);
+                onBack();
+              } catch (e: any) {
+                setStatus("error");
+                setSaveError(e.message);
+              }
+            }}
+          >
+            Delete
+          </button>
+        )}
         {initial.role === "owner" ? (
           <button className="btn primary" onClick={() => setShareOpen(true)}>
             Share{shares.length ? ` · ${shares.length}` : ""}
