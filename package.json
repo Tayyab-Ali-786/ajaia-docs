@@ -1,0 +1,52 @@
+{
+  "name": "ajaia-docs",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "node --watch --import tsx server/index.ts & vite",
+    "dev:server": "node --watch --import tsx server/index.ts",
+    "dev:client": "vite",
+    "build": "vite build",
+    "start": "NODE_ENV=production node --import tsx server/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "type": "module",
+  "dependencies": {
+    "@tiptap/pm": "^3.32.1",
+    "@tiptap/react": "^3.32.1",
+    "@tiptap/starter-kit": "^3.32.1",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.3.0",
+    "mammoth": "^1.13.0",
+    "marked": "^18.1.2",
+    "multer": "^2.5.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "sanitize-html": "^2.18.1",
+    "turndown": "^7.2.4"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/sanitize-html": "^2.16.2",
+    "@types/supertest": "^7.2.1",
+    "@types/turndown": "^5.0.6",
+    "@vitejs/plugin-react": "^6.1.2",
+    "supertest": "^7.3.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  },
+  "private": true,
+  "engines": {
+    "node": "24.x"
+  }
+}
