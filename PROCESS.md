@@ -42,3 +42,13 @@ Columns: what I asked → what the AI produced → what I kept, changed or rejec
 | 20 | 1:06 | Manual test: flickering "Save failed"; asked for text alignment | Retry loop fixed (failures classified, editor locked on 404/403); image-paste notice; alignment | Kept | Found by hand; details in ARCHITECTURE.md › Save failures |
 | 21 | 1:06 | New E2E checks for those fixes | They found 2 more bugs: `setEditable` caused another save loop, and the toolbar remounted on every render | Both fixed | Writing the reproduction test before trusting the fix paid off twice |
 | 22 | 1:11 | "Review again: optimizations and edge cases" | 8 edge cases fixed, about 6 → 4 database round trips per save, 1 optimization rejected | Kept; checked that the new test fails on the old code | Details in AI_WORKFLOW.md and ARCHITECTURE.md › Performance |
+
+## Finalize phase (feature freeze)
+
+| # | T+ | Prompt (summary) | AI output | Kept / Changed / Rejected | Why |
+|---|---|---|---|---|---|
+| 23 | 1:20 | Read-only check of the Railway project from #5 | 10 existing services unchanged (same deploy IDs). Ours: 1 service with **no deployments**, 1 empty volume, 3 variables | Corrected my proposed "caught before any changes" wording to the accurate version in #5 | The log must match reality, even when the truth is less flattering |
+| 24 | 1:22 | Make the process log chronological and neutral; restructure SUBMISSION.md | Elapsed times checked against `git log`; 2 estimated times corrected; long rows trimmed, with the detail moved to ARCHITECTURE.md; SUBMISSION maps every requirement in the brief | Kept | A reviewer can check each requirement in one table |
+| 25 | 1:25 | Fresh clone: follow the README exactly | **Found a bug:** `npm start` crashed on a clean clone because PGlite doesn't create `data/`. Fixed; the clean clone now passes install, build, 9/9 tests, typecheck and 18/18 E2E | Fixed | Only a clean environment catches "works on my machine" |
+| 26 | 1:27 | Scan for secrets; add `.env.example` | All 13 commits: the real database password appears 0 times, no Postgres URLs with credentials, no env or db files tracked. Added `.env.example` and `--env-file-if-exists` | Kept | Public repo |
+| 27 | 1:29 | Final production check | E2E against the live URL, then all test data deleted (3 seeded users only) | **18/18 checks passed on the live URL**; afterwards: 0 documents, shares and versions, only the 3 seeded users | Reviewers start with a clean, verified build |
