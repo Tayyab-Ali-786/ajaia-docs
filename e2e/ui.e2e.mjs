@@ -31,7 +31,7 @@ const waitSaved = (page) => page.waitForFunction(() => document.querySelector(".
 const alice = await newUser("alice");
 await page_shot(alice, "01-login");
 await clickText(alice, ".user-pick", "Alice");
-await alice.waitForSelector(".list-page");
+await alice.waitForSelector(".doc-section");
 await clickText(alice, "button", "New document");
 await alice.waitForSelector(".tiptap");
 
@@ -101,7 +101,7 @@ await page_shot(alice, "05-list-owner");
 // ---- Bob: sees shared doc, read-only
 const bob = await newUser("bob");
 await clickText(bob, ".user-pick", "Bob");
-await bob.waitForSelector(".list-page");
+await bob.waitForSelector(".doc-section");
 const bobList = await bob.$eval(".list-page", (e) => e.textContent);
 check(bobList.includes("Q4 Launch Plan") && bobList.includes("from Alice Chen"), "Bob sees doc under Shared with me");
 check(!bobList.includes("meeting-notes"), "Bob does not see Alice's unshared doc");

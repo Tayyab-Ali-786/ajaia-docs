@@ -17,3 +17,7 @@ Tool: Claude Code (CLI agent, Claude Opus) as pair programmer in the repo + term
 | 9 | 16:33 | Investigate E2E failures | (a) "rename not persisted" → stored title `Untitled documenQ4 Launch Plant` proved a **test** bug (triple-click didn't select); (b) import timeout → transient | Fixed the test, not the app | Read the data before "fixing" code |
 | 10 | 16:35 | Review screenshots | Spotted default-blue export link, loose list spacing, missing Delete button in UI | Fixed all three | Visual review catches what assertions don't |
 | 11 | 16:37 | Draft README / ARCHITECTURE / AI_WORKFLOW / SUBMISSION | Drafts | Kept; trimmed | Concise, reviewer-first structure |
+| 12 | 16:42 | "Switch to Supabase" | Listed orgs (read-only), created a dedicated `ajaia-docs` project with an explicit `--org-id`, us-west-1 | Kept | Explicit target avoids CLI defaults (lesson from Railway) |
+| 13 | 16:45 | Port to Postgres | `pg` pool for prod + PGlite (WASM Postgres) for tests/local; `?`→`$n`; quoted camelCase aliases; `now()`; cascade restored | Kept; 7/7 tests green | Same dialect in tests and prod; zero-install local dev |
+| 14 | 16:50 | Connect to Supabase | Found direct host is IPv6-only → linked CLI in scratchpad to get IPv4 session-pooler URL; password kept in a local 600-perm file | Kept | Render free can't reach IPv6; secrets never in chat/repo |
+| 15 | 16:53 | E2E against Supabase | 1 failure → diagnosed as test race (list still "Loading…"), fixed wait condition; 10/10 pass; wiped test data | Kept | Remote DB latency exposed a test assumption, not an app bug |

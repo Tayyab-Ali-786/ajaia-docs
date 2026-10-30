@@ -1,6 +1,5 @@
-import { createClient, type Client, type InArgs } from "@libsql/client";
-import fs from "node:fs";
-import path from "node:path";
+import pg from "pg";
+import { PGlite } from "@electric-sql/pglite";
 
 export const SEED_USERS = [
   { email: "alice@ajaia.test", name: "Alice Chen" },
@@ -8,56 +7,74 @@ export const SEED_USERS = [
   { email: "carol@ajaia.test", name: "Carol Diaz" },
 ];
 
-/** Thin wrapper so call sites read like a sync SQLite API: db.get / db.all / db.run. */
+const SCHEMA = `
+  CREATE TABLE IF NOT EXISTS users (
+    id    SERIAL PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    name  TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS documents (
+    id         TEXT PRIMARY KEY,
+    owner_id   INTEGER NOT NULL REFERENCES users(id),
+    title      TEXT NOT NULL,
+    content    TEXT NOT NULL DEFAULT '',
+    version    INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_documents_owner ON documents(owner_id);
+
+  CREATE TABLE IF NOT EXISTS document_shares (
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    role        TEXT NOT NULL CHECK (role IN ('viewer', 'editor')),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (document_id, user_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_shares_user ON document_shares(user_id);
+`;
+
+type Query = (sql: string, params: unknown[]) => Promise<{ rows: unknown[]; rowCount: number }>;
+
+/** Thin wrapper over Postgres (pg pool in prod, PGlite in tests/local dev): db.get / db.all / db.run. */
 export class DB {
-  constructor(readonly client: Client) {}
-  async all<T>(sql: string, args: InArgs = []): Promise<T[]> {
-    return (await this.client.execute({ sql, args })).rows as unknown as T[];
+  constructor(private query: Query, readonly close: () => Promise<void>) {}
+  async all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
+    return (await this.query(sql, params)).rows as T[];
   }
-  async get<T>(sql: string, args: InArgs = []): Promise<T | undefined> {
-    return (await this.all<T>(sql, args))[0];
+  async get<T>(sql: string, params: unknown[] = []): Promise<T | undefined> {
+    return (await this.all<T>(sql, params))[0];
   }
-  async run(sql: string, args: InArgs = []) {
-    return this.client.execute({ sql, args });
+  /** Returns the number of affected rows. */
+  async run(sql: string, params: unknown[] = []): Promise<number> {
+    return (await this.query(sql, params)).rowCount;
   }
 }
 
 /**
- * url: ":memory:" (tests), "file:data/app.db" (local), or "libsql://<db>.turso.io" (prod, needs authToken).
- * Same SQLite dialect everywhere, so local dev needs no external service.
+ * url: "postgres://…" (Supabase in prod) → pg pool.
+ *      anything else → embedded PGlite: "memory://" for tests, or a directory path for local persistence.
+ * Same Postgres dialect everywhere, so local dev needs no external service.
  */
-export async function openDb(url: string, authToken?: string): Promise<DB> {
-  if (url.startsWith("file:")) fs.mkdirSync(path.dirname(url.slice(5)), { recursive: true });
-  const db = new DB(createClient({ url, authToken }));
-  await db.client.executeMultiple(`
-    PRAGMA foreign_keys = ON;
-
-    CREATE TABLE IF NOT EXISTS users (
-      id    INTEGER PRIMARY KEY,
-      email TEXT NOT NULL UNIQUE,
-      name  TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS documents (
-      id         TEXT PRIMARY KEY,
-      owner_id   INTEGER NOT NULL REFERENCES users(id),
-      title      TEXT NOT NULL,
-      content    TEXT NOT NULL DEFAULT '',
-      version    INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_documents_owner ON documents(owner_id);
-
-    CREATE TABLE IF NOT EXISTS document_shares (
-      document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-      user_id     INTEGER NOT NULL REFERENCES users(id),
-      role        TEXT NOT NULL CHECK (role IN ('viewer','editor')),
-      created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-      PRIMARY KEY (document_id, user_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_shares_user ON document_shares(user_id);
-  `);
-  for (const u of SEED_USERS) await db.run("INSERT OR IGNORE INTO users (email, name) VALUES (?, ?)", [u.email, u.name]);
+export async function openDb(url: string): Promise<DB> {
+  let db: DB;
+  if (/^postgres(ql)?:\/\//.test(url)) {
+    const pool = new pg.Pool({ connectionString: url, max: 5, ssl: url.includes("localhost") ? false : { rejectUnauthorized: false } });
+    db = new DB(async (sql, params) => {
+      const r = await pool.query(sql, params);
+      return { rows: r.rows, rowCount: r.rowCount ?? 0 };
+    }, () => pool.end());
+    await pool.query(SCHEMA);
+  } else {
+    const lite = new PGlite(url);
+    db = new DB(async (sql, params) => {
+      const r = await lite.query(sql, params);
+      return { rows: r.rows, rowCount: r.affectedRows ?? 0 };
+    }, () => lite.close());
+    await lite.exec(SCHEMA);
+  }
+  for (const u of SEED_USERS)
+    await db.run("INSERT INTO users (email, name) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING", [u.email, u.name]);
   return db;
 }

@@ -12,6 +12,4 @@ services:
       - key: SESSION_SECRET
         generateValue: true
       - key: DATABASE_URL
-        sync: false # libsql://<db>-<org>.turso.io
-      - key: DATABASE_AUTH_TOKEN
-        sync: false
+        sync: false # Supabase session pooler: postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres

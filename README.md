@@ -2,7 +2,7 @@
 
 A small full-stack Google-Docs-style editor: create, format, rename and autosave documents, import files, and share with other users as **viewer** or **editor**.
 
-- **Live app:** _LIVE_URL_ (Render free tier — first load after idle can take ~30 s to wake up)
+- **Live app:** _LIVE_URL_ (Render free tier; the first load after idle can take ~30 s to wake up)
 - **Source:** https://github.com/Tayyab-Ali-786/ajaia-docs
 - **Walkthrough video:** see `VIDEO_URL.txt`
 
@@ -26,7 +26,7 @@ Sign-in is mocked: pick a seeded user on the login screen (no password).
 | Rich text | Bold, italic, underline, strikethrough, Heading 1–3, bulleted and numbered lists, quotes, undo/redo. Markdown shortcuts work too (`# `, `- `, `1. `). |
 | File import | **`.txt`, `.md`, `.docx` (max 2 MB)** → a new editable document, titled after the file name. Other types are rejected with a clear message. |
 | Sharing | Owner shares by email as **viewer** (read-only) or **editor**, changes the role, or revokes access. The list separates **My documents** from **Shared with me** (with role + owner). |
-| Persistence | Documents, formatting (stored as sanitized HTML) and shares are kept in SQLite (libSQL): a local file in dev, Turso in production. |
+| Persistence | Documents, formatting (stored as sanitized HTML) and shares are kept in Postgres: Supabase in production, embedded PGlite (Postgres compiled to WASM) locally and in tests. |
 | Conflict safety | Every save carries a version number. If someone else saved first, you get a "Reload" prompt (HTTP 409) instead of silently overwriting their work. |
 | Export | Download any document you can open as Markdown. |
 
@@ -37,7 +37,7 @@ Requires **Node 24** (Node 22.13+ should also work).
 ```bash
 npm install
 npm run build          # build the React client into dist/client
-npm start              # http://localhost:3001  (SQLite file at data/app.db)
+npm start              # http://localhost:3001  (embedded Postgres in data/pgdata, no DB install needed)
 ```
 
 Dev mode with hot reload: `npm run dev:server` and `npm run dev:client` in two terminals → http://localhost:5173 (Vite proxies `/api` to :3001).
@@ -45,14 +45,13 @@ Dev mode with hot reload: `npm run dev:server` and `npm run dev:client` in two t
 | Env var | Default | Purpose |
 |---|---|---|
 | `PORT` | `3001` | HTTP port |
-| `DATABASE_URL` | `file:data/app.db` | libSQL URL: local file, or `libsql://<db>.turso.io` |
-| `DATABASE_AUTH_TOKEN` | — | Turso token (production only) |
+| `DATABASE_URL` | `data/pgdata` | `postgresql://…` (e.g. Supabase) uses a pg pool. Anything else is an embedded PGlite path (`memory://` for tests). |
 | `SESSION_SECRET` | dev value | Signs the session cookie. **Set it in production.** |
 
 ## Tests
 
 ```bash
-npm test         # 7 API tests (Vitest + Supertest, in-memory DB)
+npm test         # 7 API tests (Vitest + Supertest, in-memory PGlite Postgres)
 npm run e2e      # headless-Chrome UI run against a running server; writes docs/screenshots/
 npm run typecheck
 ```
@@ -73,10 +72,10 @@ npm run typecheck
 
   `CHROME_PATH` overrides the browser path.
 
-## Deploy (Render + Turso, both free)
+## Deploy (Render + Supabase, both free)
 
-1. Turso: create a database, then copy its URL and a token.
-2. Render: **New → Blueprint** → this repo (it reads `render.yaml`). Set `DATABASE_URL` and `DATABASE_AUTH_TOKEN`; `SESSION_SECRET` is generated for you.
+1. Supabase: create a project, then copy the **session pooler** connection string (Connect → Session pooler; it's IPv4-compatible, which Render needs). The tables and seed users are created on boot.
+2. Render: **New → Blueprint** → this repo (it reads `render.yaml`). Set `DATABASE_URL`; `SESSION_SECRET` is generated for you.
 
 ## Docs
 

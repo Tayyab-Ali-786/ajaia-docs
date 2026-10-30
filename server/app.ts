@@ -11,7 +11,7 @@ type Role = "owner" | "editor" | "viewer";
 interface User { id: number; email: string; name: string }
 interface DocRow {
   id: string; owner_id: number; title: string; content: string;
-  version: number; created_at: string; updated_at: string;
+  version: number; created_at: Date; updated_at: Date;
 }
 
 declare module "express-serve-static-core" {
@@ -35,7 +35,7 @@ export function createApp(db: DB, opts: AppOptions) {
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 } });
 
   // ---- helpers ----------------------------------------------------------
-  const getUser = (id: number) => db.get<User>("SELECT id, email, name FROM users WHERE id = ?", [id]);
+  const getUser = (id: number) => db.get<User>("SELECT id, email, name FROM users WHERE id = $1", [id]);
 
   async function requireUser(req: Request, _res: Response, next: NextFunction) {
     const uid = Number(req.signedCookies?.uid);
@@ -47,11 +47,11 @@ export function createApp(db: DB, opts: AppOptions) {
 
   /** Load a doc and the caller's role on it. Missing OR inaccessible -> 404 (don't leak existence). */
   async function loadDoc(docId: string, userId: number): Promise<{ doc: DocRow; role: Role }> {
-    const doc = await db.get<DocRow>("SELECT * FROM documents WHERE id = ?", [docId]);
+    const doc = await db.get<DocRow>("SELECT * FROM documents WHERE id = $1", [docId]);
     if (doc) {
       if (doc.owner_id === userId) return { doc, role: "owner" };
       const share = await db.get<{ role: Role }>(
-        "SELECT role FROM document_shares WHERE document_id = ? AND user_id = ?", [docId, userId]);
+        "SELECT role FROM document_shares WHERE document_id = $1 AND user_id = $2", [docId, userId]);
       if (share) return { doc, role: share.role };
     }
     throw new HttpError(404, "Document not found");
@@ -78,7 +78,7 @@ export function createApp(db: DB, opts: AppOptions) {
   const listShares = (docId: string) =>
     db.all(
       `SELECT u.id, u.email, u.name, s.role FROM document_shares s
-       JOIN users u ON u.id = s.user_id WHERE s.document_id = ? ORDER BY u.name`,
+       JOIN users u ON u.id = s.user_id WHERE s.document_id = $1 ORDER BY u.name`,
       [docId],
     );
 
@@ -94,8 +94,8 @@ export function createApp(db: DB, opts: AppOptions) {
 
   async function createDoc(ownerId: number, title: string, content: string) {
     const id = crypto.randomUUID();
-    await db.run("INSERT INTO documents (id, owner_id, title, content) VALUES (?, ?, ?, ?)", [id, ownerId, title, content]);
-    return (await db.get<DocRow>("SELECT * FROM documents WHERE id = ?", [id]))!;
+    await db.run("INSERT INTO documents (id, owner_id, title, content) VALUES ($1, $2, $3, $4)", [id, ownerId, title, content]);
+    return (await db.get<DocRow>("SELECT * FROM documents WHERE id = $1", [id]))!;
   }
 
   // ---- auth (mocked: pick a seeded user) --------------------------------
@@ -127,11 +127,11 @@ export function createApp(db: DB, opts: AppOptions) {
   api.get("/documents", async (req, res) => {
     const uid = req.user!.id;
     const owned = await db.all(
-      "SELECT id, title, updated_at AS updatedAt FROM documents WHERE owner_id = ? ORDER BY updated_at DESC", [uid]);
+      `SELECT id, title, updated_at AS "updatedAt" FROM documents WHERE owner_id = $1 ORDER BY updated_at DESC`, [uid]);
     const shared = await db.all(
-      `SELECT d.id, d.title, d.updated_at AS updatedAt, s.role, u.name AS ownerName
+      `SELECT d.id, d.title, d.updated_at AS "updatedAt", s.role, u.name AS "ownerName"
        FROM document_shares s JOIN documents d ON d.id = s.document_id JOIN users u ON u.id = d.owner_id
-       WHERE s.user_id = ? ORDER BY d.updated_at DESC`,
+       WHERE s.user_id = $1 ORDER BY d.updated_at DESC`,
       [uid],
     );
     res.json({ owned, shared });
@@ -167,23 +167,19 @@ export function createApp(db: DB, opts: AppOptions) {
 
     const title = body.title === undefined ? doc.title : validTitle(body.title);
     const content = body.content === undefined ? doc.content : validContent(body.content);
-    const result = await db.run(
-      `UPDATE documents SET title = ?, content = ?, version = version + 1,
-       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND version = ?`,
+    const updated = await db.run(
+      `UPDATE documents SET title = $1, content = $2, version = version + 1, updated_at = now()
+       WHERE id = $3 AND version = $4`,
       [title, content, doc.id, expected],
     );
-    if (result.rowsAffected === 0) throw conflict;
+    if (updated === 0) throw conflict;
     res.json(await serializeDoc((await loadDoc(doc.id, req.user!.id)).doc, role));
   });
 
   api.delete("/documents/:id", async (req, res) => {
     const { doc, role } = await loadDoc(req.params.id, req.user!.id);
     requireRole(role, ["owner"]);
-    // Explicit share cleanup: remote libSQL connections don't guarantee PRAGMA foreign_keys (no cascade).
-    await db.client.batch([
-      { sql: "DELETE FROM document_shares WHERE document_id = ?", args: [doc.id] },
-      { sql: "DELETE FROM documents WHERE id = ?", args: [doc.id] },
-    ], "write");
+    await db.run("DELETE FROM documents WHERE id = $1", [doc.id]); // shares cascade
     res.status(204).end();
   });
 
@@ -204,11 +200,11 @@ export function createApp(db: DB, opts: AppOptions) {
     const email = String(req.body?.email ?? "").trim().toLowerCase();
     const shareRole = req.body?.role ?? "editor";
     if (!["viewer", "editor"].includes(shareRole)) throw new HttpError(400, "Role must be viewer or editor");
-    const target = await db.get<{ id: number }>("SELECT id FROM users WHERE email = ?", [email]);
+    const target = await db.get<{ id: number }>("SELECT id FROM users WHERE email = $1", [email]);
     if (!target) throw new HttpError(404, `No user with email "${email}"`);
     if (target.id === doc.owner_id) throw new HttpError(400, "You already own this document");
     await db.run(
-      `INSERT INTO document_shares (document_id, user_id, role) VALUES (?, ?, ?)
+      `INSERT INTO document_shares (document_id, user_id, role) VALUES ($1, $2, $3)
        ON CONFLICT(document_id, user_id) DO UPDATE SET role = excluded.role`,
       [doc.id, target.id, shareRole],
     );
@@ -218,7 +214,7 @@ export function createApp(db: DB, opts: AppOptions) {
   api.delete("/documents/:id/shares/:userId", async (req, res) => {
     const { doc, role } = await loadDoc(req.params.id, req.user!.id);
     requireRole(role, ["owner"]);
-    await db.run("DELETE FROM document_shares WHERE document_id = ? AND user_id = ?", [doc.id, Number(req.params.userId)]);
+    await db.run("DELETE FROM document_shares WHERE document_id = $1 AND user_id = $2", [doc.id, Number(req.params.userId)]);
     res.json(await listShares(doc.id));
   });
 

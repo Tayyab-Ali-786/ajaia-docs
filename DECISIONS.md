@@ -12,9 +12,9 @@ Format: **Decision** — options considered → choice → why → what we gave 
 
 ## Decisions
 1. **Stack** — Next.js vs Vite React + Express vs Go → **Vite React + Express (TS), one service** → fastest for me, one deploy unit, Express serves the SPA + API. Gave up SSR (not needed for an internal tool).
-2. **DB** — Postgres/Supabase vs SQLite → **SQLite dialect via libSQL**: local file in dev/tests (zero setup), **Turso** in prod. Same SQL everywhere. Gave up rich Postgres features (not needed).
+2. **DB**: SQLite → libSQL/Turso → **Postgres on Supabase** (final). After the Railway trial expired, the first plan was Turso (no code changes). I switched to Supabase because I already have an account and a CLI, and it's a widely recognized managed Postgres. Tests and local dev use **PGlite** (WASM Postgres) so they run the same dialect with no install. Cost: a 15-minute SQL port.
 3. **Editor** — TipTap vs Quill vs Lexical vs Slate → **TipTap v3** → StarterKit covers bold/italic/underline/headings/lists; clean HTML I/O.
-4. **Deploy** — Railway (trial expired) vs Render+Turso vs Render ephemeral → **Render free + Turso free**. Gave up: ~30s cold start after idle on Render free.
+4. **Deploy**: Railway (trial expired) vs Render+Turso vs Render ephemeral → **Render free + Supabase free**. Gave up: a ~30 s cold start after idle on Render free. Connects through the Supabase session pooler (the direct host is IPv6-only).
 5. **Roles** — basic access vs viewer/editor → **viewer/editor from day one** (one column + one check); covers a stretch item cheaply.
 6. **Real-time collaboration** — **deliberately skipped** (Yjs + websockets = multi-hour, high risk). Replaced with cheap, correct conflict detection (version column).
 7. **Security baseline** — server-side HTML sanitization (allow-list matching editor output) on every write *and* import; 404 for inaccessible docs (no existence leak); signed cookies.

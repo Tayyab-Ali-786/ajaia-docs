@@ -12,7 +12,7 @@ Express 5 (TypeScript, one Node service)
    ├─ /api/documents/:id/shares   owner-only grant / change role / revoke
    └─ serves the built SPA from dist/client
    ▼
-libSQL (SQLite dialect): local file in dev/tests · Turso in production
+Postgres: Supabase in production (pg pool) · PGlite (embedded WASM Postgres) locally and in tests
 ```
 
 One deployable unit: the API and the frontend ship together, there's no CORS, and local setup is one `npm start`.
@@ -66,5 +66,6 @@ All permission logic goes through one function, `loadDoc(docId, userId) → { do
 ## Tradeoffs worth knowing
 
 - **Render free tier** goes to sleep when idle, so the first request takes about 30 s.
-- **Turso over HTTP** doesn't guarantee `PRAGMA foreign_keys`, so deleting a document removes its shares explicitly in a single batch.
+- **PGlite for tests and local dev** runs the same Postgres engine as production, so tests check the real SQL (placeholders, `ON CONFLICT`, cascades) and running locally doesn't need a database install.
+- **Supabase's direct database host is IPv6-only.** Production connects through the session pooler (IPv4).
 - The mocked session cookie stores only the user id. It's signed (it can't be forged), but it's not a production-grade session. Replacing it with real auth only touches `requireUser`.
